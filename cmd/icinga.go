@@ -17,19 +17,44 @@ package cmd
 
 import (
 	"fmt"
+	"os"
 
+	"github.com/marcsauter/trapforwarder/icinga"
+	"github.com/marcsauter/trapforwarder/logger"
+	"github.com/marcsauter/trapforwarder/trap"
 	"github.com/spf13/cobra"
 )
+
+var pipe string
 
 // icingaCmd respresents the icinga command
 var icingaCmd = &cobra.Command{
 	Use:   "icinga",
 	Short: "convert and send trap to icinga",
 	Run: func(cmd *cobra.Command, args []string) {
-		fmt.Println("icinga is not implemented yet")
+		// read the trap
+		t := trap.NewTrap()
+		// icinga
+		i := icinga.NewIcinga(t)
+		// connect to icinga client
+		if stat, err := os.Stat(pipe); os.IsNotExist(err) || stat.Mode()&os.ModeNamedPipe == 0 {
+			logger.Fatal(fmt.Sprintf("%s does not exist or is not a named pipe\n", pipe))
+		}
+		f, err := os.OpenFile(pipe, os.O_RDWR, 0666)
+		if err != nil {
+			logger.Fatal(err.Error())
+		}
+		defer f.Close()
+		// send event
+		if err := i.Send(f); err != nil {
+			w, _ := logger.New(logger.Severity, logger.Prefix)
+			t.Send(w)
+			logger.Fatal(err.Error())
+		}
 	},
 }
 
 func init() {
 	RootCmd.AddCommand(icingaCmd)
+	icingaCmd.Flags().StringVar(&pipe, "pipe", "/var/run/icinga2/cmd/icinga2.cmd", "pipe where icinga is listening")
 }
